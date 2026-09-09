@@ -20,7 +20,18 @@
 
 using namespace std;
 
+// =========================================================
+// Punto de entrada.
+//   - Build de consola (PC): main() estandar.
+//   - Build de Android (ANDROID_BUILD): se expone iniciarJuego(),
+//     llamado desde el puente JNI en un hilo de background.
+// El cuerpo del bucle es identico en ambos casos.
+// =========================================================
+#ifdef ANDROID_BUILD
+void iniciarJuego() {
+#else
 int main() {
+#endif
     string nombreUser;
     int tipoClase;
 
@@ -266,5 +277,7 @@ int main() {
             }
         }
     }
+#ifndef ANDROID_BUILD
     return 0;
+#endif
 }
