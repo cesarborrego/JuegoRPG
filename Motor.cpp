@@ -1,23 +1,29 @@
 // =========================================================
-// BLOQUE M: MOTOR PRINCIPAL DEL JUEGO (v1.31)
+// BLOQUE M: MOTOR PRINCIPAL DEL JUEGO (v1.4)
 // =========================================================
 #include "utilidades.h"
+#include "IO.h"
+#include "SaveGame.h"
 #include "personajes.h"
-#include "combate.h"       // obtenerEfectoPorId ya declarada aquí
+#include "combate.h"       
 #include "loot.h"
 #include "tienda.h"
 #include "Rng.h"
 #include <iostream>
 #include <map>
 #include <cctype>
+#include <filesystem>
+#include <chrono>
+#include <iomanip>
 #include "catalogoObjetos.h"
 #include "Armas.h"
 #include "Artefactos.h" 
 #include "Reliquias.h"
 #include "Efectos.h"
 #include "Monstruos.h"
-#include "Habilidades.h"    
-
+#include "Habilidades.h"
+#include "Recursos.h"
+#include "Zonas.h"         
 using namespace std;
 
 // =========================================================
@@ -66,10 +72,10 @@ int main() {
     if (aMinuscula(decision) == 's') {
         Arma inicial(0, "-", 0, "Comun", 0, "Ninguno", 0, 0);
 
-        if (p.clase == "Guerrero") {
+        if (p.clase == Clase::Guerrero) {
             inicial = Arma(1, "Espada Oxidada", 12, "Comun", 0, "Guerrero", 1, 0);
             cout << "\nEntre el polvo encuentras una Espada Oxidada y una Pocion Baja." << endl;
-        } else if (p.clase == "Mago") {
+        } else if (p.clase == Clase::Mago) {
             inicial = Arma(7, "Varita Astillada", 12, "Comun", 0, "Mago", 1, 0);
             cout << "\nEntre el polvo encuentras una Varita Astillada y una Pocion Baja." << endl;
         } else { // Cazador
@@ -87,11 +93,15 @@ int main() {
 
     while (true) {
         limpiarPantalla();
-        cout << "ESTAS EN: " << obtenerNombreZona(p.posY) << endl;
+        
+        // NUEVO: Evaluación unificada de la casilla actual a través del Gestor de Zonas
+        InfoCasilla casillaActual = GestorZonas::evaluarCasilla(p.posX, p.posY);
+        
+        cout << "ESTAS EN: " << casillaActual.nombreZona << endl;
         cout << "POSICION: [X: " << p.posX << " | Y: " << p.posY << "]" << endl;
 
         // --- HUD ---
-        cout << "=============== " << p.nombre << " (" << p.clase;
+        cout << "=============== " << p.nombre << " (" << claseToString(p.clase);
         if (p.tieneSubclase15) {
             int idSubclase = p.habilidadesIds.back();
             if (auto h = obtenerHabilidadPorId(idSubclase)) cout << " ===> " << h->nombre;
@@ -117,14 +127,14 @@ int main() {
             continue; 
         }
 
-        // Detección de Tienda
-        if (p.posY == 30 || p.posY == 90 || p.posY == 150 || p.posY == 210) { 
+        // Detección de Tienda usando el gestor de zonas
+        if (casillaActual.esTienda) { 
             cout << "[-] TIENDA CERCANA: Presiona 'T' para comerciar." << endl;
         }
 
         if (p.posY >= 230) cout << "[ALERTA] El aire hierve... Lancelot esta muy cerca." << endl;
 
-        cout << "CONTROLES: (W-A-S-D) Mover | (P) Status | (Q) Salir" << endl;
+        cout << "CONTROLES: (W-A-S-D) Mover | (P) Status | (G) Guardar/Cargar | (Q) Salir" << endl;
         
         char input; cin >> input; input = aMinuscula(input);
 
@@ -132,12 +142,23 @@ int main() {
             if (p.posY < 241) {
                 p.posY++;
 
-                // Diálogo ambiental al moverse (15% de probabilidad)
-                lanzarDialogoAmbiental(p.posY);
+                // NUEVO: Evaluamos qué hay en la nueva casilla
+                InfoCasilla nuevaCasilla = GestorZonas::evaluarCasilla(p.posX, p.posY);
 
-                // 30% de probabilidad de combate aleatorio
-                if (p.posY < 241 && Rng::get().probabilidad(30)) {
+                // Si hay un jefe forzado (Valdrame en Y=60), se salta el azar y pelea
+                if (!p.valdrameDerrotado && nuevaCasilla.esJefeObligatorio) {
+                    limpiarPantalla();
+                    mostrarCabecera(nuevaCasilla.nombreZona);
                     iniciarCombate(p, p.posY);
+                } else {
+                    // Flujo normal si no hay jefe forzado
+                    // Diálogo ambiental al moverse (15% de probabilidad)
+                    lanzarDialogoAmbiental(p.posY);
+
+                    // 30% de probabilidad de combate aleatorio
+                    if (p.posY < 241 && Rng::get().probabilidad(30)) {
+                        iniciarCombate(p, p.posY);
+                    }
                 }
             }
         }
@@ -145,7 +166,7 @@ int main() {
         else if (input == 'a') { p.posX--; }
         else if (input == 'd') { p.posX++; }
         else if (input == 't') {
-            if (p.posY == 30 || p.posY == 90 || p.posY == 150 || p.posY == 210) {
+            if (casillaActual.esTienda) {
                 entrarTienda(p);
             }
         }
@@ -155,7 +176,7 @@ int main() {
             mostrarCabecera("STATUS DE " + p.nombre);
 
             // Clase y subclase
-            cout << "Clase: " << p.clase;
+            cout << "Clase: " << claseToString(p.clase);
             if (p.tieneSubclase15) {
                 int idSubclase = p.habilidadesIds.back();
                 if (auto h = obtenerHabilidadPorId(idSubclase)) cout << " → " << h->nombre;
@@ -230,6 +251,107 @@ int main() {
             cout << "\nPresiona ENTER para volver...";
             limpiarBuffer(); cin.get();
         }
+        else if (input == 'g') {
+            limpiarPantalla();
+            mostrarCabecera("GUARDADO / CARGA");
+            cout << "1. Guardar partida" << endl;
+            cout << "2. Cargar partida" << endl;
+            cout << "3. Nueva partida" << endl;
+            cout << "4. Volver" << endl;
+            cout << "Seleccion: ";
+            int opc; if (!(cin >> opc)) { limpiarBuffer(); continue; }
+            limpiarBuffer();
+            if (opc == 1) {
+                cout << "Nombre de archivo (sin extension): ";
+                string nombreArchivo = IO::entrada().leerLinea();
+                if (nombreArchivo.empty()) nombreArchivo = "slot1";
+                string ruta = string("savegames/") + nombreArchivo + ".json";
+                if (guardarPartida(p, p.posY, ruta)) cout << "[OK] Partida guardada en: " << ruta << endl;
+                else cout << "[ERROR] No se pudo guardar la partida." << endl;
+                esperarTecla();
+            } else if (opc == 2) {
+                namespace fs = std::filesystem;
+                string savesDir = "savegames";
+                struct SaveInfo { string name; string mtime; uintmax_t size; };
+                vector<SaveInfo> saves;
+                if (fs::exists(savesDir) && fs::is_directory(savesDir)) {
+                    for (auto &entry : fs::directory_iterator(savesDir)) {
+                        if (entry.is_regular_file()) {
+                            auto pth = entry.path();
+                            if (pth.extension() == ".json") {
+                                string name = pth.stem().string();
+                                // last write time -> human readable
+                                string mtimeStr = "?";
+                                try {
+                                    auto ftime = fs::last_write_time(pth);
+                                    auto sctp = std::chrono::system_clock::now() + (ftime - fs::file_time_type::clock::now());
+                                    std::time_t cftime = std::chrono::system_clock::to_time_t(sctp);
+                                    std::tm tm = *std::localtime(&cftime);
+                                    std::ostringstream oss;
+                                    oss << std::put_time(&tm, "%Y-%m-%d %H:%M");
+                                    mtimeStr = oss.str();
+                                } catch (...) {}
+
+                                uintmax_t fsize = 0;
+                                try { fsize = fs::file_size(pth); } catch (...) { fsize = 0; }
+
+                                saves.push_back({name, mtimeStr, fsize});
+                            }
+                        }
+                    }
+                }
+
+                if (saves.empty()) {
+                    cout << "[INFO] No hay partidas guardadas." << endl;
+                    esperarTecla();
+                } else {
+                    cout << "Partidas disponibles:\n";
+                    for (size_t i = 0; i < saves.size(); ++i) {
+                        auto &s = saves[i];
+                        cout << (i + 1) << ". " << s.name << " (";
+                        if (s.size >= 1024) cout << (s.size / 1024) << " KB";
+                        else cout << s.size << " B";
+                        cout << ", " << s.mtime << ")\n";
+                    }
+                    cout << "Ingresa numero para cargar, o nombre (sin extension). ENTER para cancelar: ";
+                    string choice = IO::entrada().leerLinea();
+                    if (!choice.empty()) {
+                        string nombreArchivo;
+                        bool onlyDigits = true;
+                        for (char c : choice) if (!isdigit((unsigned char)c)) { onlyDigits = false; break; }
+                        if (onlyDigits) {
+                            int idx = stoi(choice);
+                            if (idx >= 1 && static_cast<size_t>(idx) <= saves.size()) {
+                                nombreArchivo = saves[static_cast<size_t>(idx - 1)].name;
+                            } else {
+                                cout << "[ERROR] Indice invalido." << endl;
+                                esperarTecla();
+                                nombreArchivo.clear();
+                            }
+                        } else {
+                            nombreArchivo = choice;
+                        }
+
+                        if (!nombreArchivo.empty()) {
+                            string ruta = savesDir + "/" + nombreArchivo + ".json";
+                            if (cargarPartida(p, p.posY, ruta)) cout << "[OK] Partida cargada: " << ruta << endl;
+                            else cout << "[ERROR] No se pudo cargar la partida." << endl;
+                            esperarTecla();
+                        }
+                    }
+                }
+            } else if (opc == 3) {
+                cout << "Crear nueva partida y perder progreso actual? (S/N): ";
+                char r; cin >> r; r = aMinuscula(r);
+                if (r == 's') {
+                    nuevaPartida(p, 0);
+                    cout << "[OK] Nueva partida creada." << endl;
+                } else cout << "Operacion cancelada." << endl;
+                esperarTecla();
+            } else {
+                // volver
+            }
+        }
         else if (input == 'q') {
             cout << "¿Estas seguro de que quieres abandonar la mision? (S/N): ";
             char conf; cin >> conf; 
@@ -250,8 +372,8 @@ int main() {
             char cL; cin >> cL;
             if (tolower(cL) == 's') {
                 Arma legend(0, "-", 0, "Comun", 0, "Ninguno", 0, 0);
-                if (p.clase == "Guerrero") legend = excalibur;
-                else if (p.clase == "Mago") legend = bastonDragon;
+                if (p.clase == Clase::Guerrero) legend = excalibur;
+                else if (p.clase == Clase::Mago) legend = bastonDragon;
                 else legend = arcoAlma;
 
                 p.armaEquipada = legend;

@@ -98,31 +98,31 @@ std::vector<Arma> listaArmas = {
     {59, "Vendaval de Luz",          64, "Raro",  -1, "Cazador", 3, 1050, 0},
     {60, "Thori'dal",                66, "Raro",  -1, "Cazador", 3, 1050, 0},
 
-    // --- ZONA 4 | Tierra Desolada (Poder: 95-120 | Precio: 1800-3000) ---
+    // --- ZONA 4 | Tierra Desolada (Poder: 80-120 | Precio: 1500-3000) ---
 
     // Guerrero
-    {61, "Mandoble de Obsidiana",   95,  "Comun", 0,  "Guerrero", 4, 1800, 0},
-    {62, "Hacha del Titan",         97,  "Comun", 0,  "Guerrero", 4, 1800, 0},
-    {63, "Maza Quebrantamundos",    97,  "Comun", 0,  "Guerrero", 4, 1800, 0},
-    {64, "Agonia de Escarcha",      99,  "Comun", 0,  "Guerrero", 4, 1900, 0},
+    {61, "Mandoble de Obsidiana",   80,  "Comun", 0,  "Guerrero", 4, 1500, 0},
+    {62, "Hacha del Titan",         82,  "Comun", 0,  "Guerrero", 4, 1500, 0},
+    {63, "Maza Quebrantamundos",    83,  "Comun", 0,  "Guerrero", 4, 1500, 0},
+    {64, "Agonia de Escarcha",      85,  "Comun", 0,  "Guerrero", 4, 1600, 0},
     {65, "Acero Demoniaco",         110, "Raro",  -1, "Guerrero", 4, 2800, 0},
     {66, "Hacha del Rey Demonio",   110, "Raro",  -1, "Guerrero", 4, 2800, 0},
     {67, "Masamune",                115, "Raro",  -1, "Guerrero", 4, 2800, 0},
 
     // Mago
-    {68, "Baston del Aposento",     105, "Comun", 0,  "Mago", 4, 2000, 0},
-    {69, "Cetro del Abismo",        105, "Comun", 0,  "Mago", 4, 2000, 0},
-    {70, "Varita del Rey Caido",    105, "Comun", 0,  "Mago", 4, 2000, 0},
-    {71, "Rosa de Hielo",           105, "Comun", 0,  "Mago", 4, 2000, 0},
+    {68, "Baston del Aposento",     82,  "Comun", 0,  "Mago", 4, 1600, 0},
+    {69, "Cetro del Abismo",        84,  "Comun", 0,  "Mago", 4, 1600, 0},
+    {70, "Varita del Rey Caido",    85,  "Comun", 0,  "Mago", 4, 1600, 0},
+    {71, "Rosa de Hielo",           86,  "Comun", 0,  "Mago", 4, 1600, 0},
     {72, "Baculo del Vacio",        115, "Raro",  -1, "Mago", 4, 3000, 0},
     {73, "Cetro Devora-Almas",      115, "Raro",  -1, "Mago", 4, 3000, 0},
     {74, "Ojo de la Tormenta",      120, "Raro",  -1, "Mago", 4, 3000, 0},
 
     // Cazador
-    {75, "Arco de Hueso de Dragon", 98,  "Comun", 0,  "Cazador", 4, 1900, 0},
-    {76, "Canon de Mano de Gilneas",99,  "Comun", 0,  "Cazador", 4, 1900, 0},
-    {77, "Ballesta Abismal",        99,  "Comun", 0,  "Cazador", 4, 1900, 0},
-    {78, "Brisaveloz",              100, "Comun", 0,  "Cazador", 4, 1900, 0},
+    {75, "Arco de Hueso de Dragon", 80,  "Comun", 0,  "Cazador", 4, 1500, 0},
+    {76, "Canon de Mano de Gilneas",82,  "Comun", 0,  "Cazador", 4, 1500, 0},
+    {77, "Ballesta Abismal",        83,  "Comun", 0,  "Cazador", 4, 1500, 0},
+    {78, "Brisaveloz",              85,  "Comun", 0,  "Cazador", 4, 1500, 0},
     {79, "Mordida del Leviatan",    113, "Raro",  -1, "Cazador", 4, 2900, 0},
     {80, "Lluvia de Estrellas",     113, "Raro",  -1, "Cazador", 4, 2900, 0},
     {81, "Arco de la Muerte",       113, "Raro",  -1, "Cazador", 4, 2900, 0}
@@ -175,3 +175,44 @@ Arma excalibur(   1000, "Excalibur, Asesina de Dragones", 325, "Legendaria", 201
 Arma bastonDragon(1001, "Baculo del Rey Dragon",          300, "Legendaria", 202, "Mago",     4, 5000, 0);
 Arma arcoAlma(    1002, "Arco Alma de Dragon",            300, "Legendaria", 203, "Cazador",  4, 5000, 0);
 Arma armaLancelot(1003, "Espada del Dios del Caos",       350, "Legendaria", 204, "Guerrero", 4, 7000, 0);
+
+// =========================================================
+// NUEVO: FILTRADO POR ZONA Y CLASE
+// Estas dos funciones ya estaban declaradas en catalogoObjetos.h
+// desde hace tiempo, pero nunca se habian implementado — loot.cpp
+// filtraba a mano con su propio for/if en vez de usarlas. Se dejan
+// listas y correctas aqui; migrar loot.cpp para que las use en vez
+// de su filtrado manual queda pendiente para cuando revisemos ese
+// archivo a fondo.
+// =========================================================
+std::vector<Arma> obtenerArmasZona(int zona, Clase clase) {
+    std::vector<Arma> resultado;
+    for (const auto& a : listaArmas) {
+        if (a.zona == zona && a.clase == clase) {
+            resultado.push_back(a);
+        }
+    }
+    return resultado;
+}
+std::optional<Arma> obtenerArmaPorId(int id) {
+    for (const auto& a : listaArmas) {
+        if (a.id == id) return a;
+    }
+    return std::nullopt;
+}
+
+std::optional<Artefacto> obtenerArtefactoPorId(int id) {
+    for (const auto& a : listaArtefactos) {
+        if (a.id == id) return a;
+    }
+    return std::nullopt;
+}
+std::vector<Artefacto> obtenerArtefactosZona(int zona, Clase clase) {
+    std::vector<Artefacto> resultado;
+    for (const auto& a : listaArtefactos) {
+        if (a.zona == zona && a.clase == clase) {
+            resultado.push_back(a);
+        }
+    }
+    return resultado;
+}

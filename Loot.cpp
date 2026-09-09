@@ -52,7 +52,6 @@ void gestionarLoot(Personaje &p, int y, bool raro)
     // --- SISTEMA DE ARMAS ---
     int sArma = Rng::get().entre(1, 100);
     Arma nW(0, "-", 0, "Ninguno", 0, "Ninguno", 0, 0); 
-    float m = raro ? 1.2f : 1.0f;
 
     if (sArma <= 40) {
         if (raro) cout << "\nUN BRILLO MISTICO EMANA DE LOS RESTOS" << endl;
@@ -60,7 +59,7 @@ void gestionarLoot(Personaje &p, int y, bool raro)
         std::vector<Arma> posibles;
         for (const auto& arma : listaArmas) {
             if (arma.clase == p.clase && arma.zona == z) {
-                if ((raro && arma.rareza == "Raro") || (!raro && arma.rareza == "Comun")) {
+                if ((raro && arma.rareza == Rareza::Raro) || (!raro && arma.rareza == Rareza::Comun)) {
                     posibles.push_back(arma);
                 }
             }
@@ -69,10 +68,23 @@ void gestionarLoot(Personaje &p, int y, bool raro)
         if (!posibles.empty()) {
             size_t index = static_cast<size_t>(Rng::get().entre(0, (int)posibles.size() - 1));
             nW = posibles[index];
-            nW.poder = static_cast<int>(std::round(static_cast<float>(nW.poder) * m));
 
             if (raro) {
-                nW.nombre += "+";
+                // Afijos dinámicos según el efecto que le tocó al arma
+                if (nW.efectoId == 1) {
+                    nW.nombre += " Llameante";
+                } else if (nW.efectoId == 2) {
+                    nW.nombre += " Tóxico/a";
+                } else if (nW.efectoId == 3) {
+                    nW.nombre += " Sangriento/a";
+                } else if (nW.efectoId == 4) {
+                    nW.nombre += " Paralizante";
+                } else if (nW.efectoId == 5) {
+                    nW.nombre += " Esquivo/a";
+                } else {
+                    nW.nombre += "+"; // Por si cae otro efecto
+                }
+
                 nW.poder = static_cast<int>(static_cast<float>(nW.poder) * 1.15f + 0.5f);
             }
 
@@ -96,7 +108,6 @@ void gestionarLoot(Personaje &p, int y, bool raro)
     else { 
         int sArtefacto = Rng::get().entre(1, 100);
         Artefacto nA(0, "-", 0, "Ninguno", 0, "Ninguno", 0, 0);
-        float mA = raro ? 1.2f : 1.0f;
 
         if (sArtefacto <= 30) {
             if (raro) cout << "\nUN DESTELLO SURGE ENTRE LOS RESTOS" << endl;
@@ -104,7 +115,7 @@ void gestionarLoot(Personaje &p, int y, bool raro)
             std::vector<Artefacto> posibles;
             for (const auto& art : listaArtefactos) {
                 if (art.clase == p.clase && art.zona == z) {
-                    if ((raro && art.rareza == "Raro") || (!raro && art.rareza == "Comun")) {
+                    if ((raro && art.rareza == Rareza::Raro) || (!raro && art.rareza == Rareza::Comun)) {
                         posibles.push_back(art);
                     }
                 }
@@ -113,8 +124,10 @@ void gestionarLoot(Personaje &p, int y, bool raro)
             if (!posibles.empty()) {
                 int index = Rng::get().entre(0, (int)posibles.size() - 1);
                 nA = posibles[static_cast<size_t>(index)];
-                nA.defensa = static_cast<int>(static_cast<float>(nA.defensa) * mA);
 
+                // CORRECCION: mismo caso que en armas -- se aplicaba "mA" (1.2x)
+                // y luego este 1.15x, dando ~1.38x real en vez de ~1.15x.
+                // Se deja un solo multiplicador.
                 if (raro) {
                     nA.nombre += "+";
                     nA.defensa = static_cast<int>(static_cast<float>(nA.defensa) * 1.15f + 0.5f);
@@ -139,6 +152,13 @@ void gestionarLoot(Personaje &p, int y, bool raro)
 
         std::vector<Reliquia> posibles;
         for (const auto& rel : listaReliquias) {
+            // NUEVO: la Calavera de Valdrame es loot exclusivo del Arzobispo
+            // (ver gestionarLootValdrame). Antes se filtraba entre el resto
+            // de reliquias del loot normal, asi que cualquier mob podia
+            // dartela por simple azar. Se excluye aqui para que solo se
+            // pueda obtener derrotandolo a el.
+            if (rel.nombre == "Calavera de Valdrame") continue;
+
             bool yaTiene = false;
             for (const auto& nombre : p.reliquias) {
                 if (nombre == rel.nombre) { yaTiene = true; break; }
@@ -157,15 +177,15 @@ void gestionarLoot(Personaje &p, int y, bool raro)
             } else if (r.nombre == "Medallon del Guardian") {
                 p.defensaBase += 20;
                 cout << "[BONUS] Defensa +20." << endl;
-            } else if (r.nombre == "Garra del Berserker" && p.clase == "Guerrero") {
+            } else if (r.nombre == "Garra del Berserker" && p.clase == Clase::Guerrero) {
                 p.fuerza += 15;
                 p.ataqueBase += 15;
                 cout << "[BONUS] Fuerza +15." << endl;
-            } else if (r.nombre == "Ojo del Arcano" && p.clase == "Mago") {
+            } else if (r.nombre == "Ojo del Arcano" && p.clase == Clase::Mago) {
                 p.inteligencia += 15;
                 p.ataqueBase += 15;
                 cout << "[BONUS] Inteligencia +15." << endl;
-            } else if (r.nombre == "Pluma del Viento" && p.clase == "Cazador") {
+            } else if (r.nombre == "Pluma del Viento" && p.clase == Clase::Cazador) {
                 p.destreza += 15;
                 p.ataqueBase += 15;
                 cout << "[BONUS] Destreza +15." << endl;
@@ -195,18 +215,19 @@ void gestionarLootValdrame(Personaje& p) {
     // --- ARMA ELITE (siempre cae, de tu clase) ---
     std::vector<Arma> posibles;
     for (const auto& arma : listaArmas) {
-        if (arma.rareza == "Elite" && arma.clase == p.clase) {
+        if (arma.rareza == Rareza::Elite && arma.clase == p.clase) {
             posibles.push_back(arma);
         }
     }
 
     if (!posibles.empty()) {
-        Arma nW = posibles[static_cast<size_t>(rand()) % posibles.size()];
+        int index = Rng::get().entre(0, static_cast<int>(posibles.size()) - 1);
+        Arma nW = posibles[static_cast<size_t>(index)];
 
         cout << "\n========================================" << endl;
         cout << "  *** ARMA ELITE: " << nW.nombre << " ***" << endl;
         cout << "  Poder  : " << nW.poder << endl;
-        cout << "  Rareza : " << nW.rareza << endl;
+        cout << "  Rareza : " << rarezaToString(nW.rareza) << std::endl;
 
         // Mostrar efecto de estado
         if (nW.efectoId != 0) {
