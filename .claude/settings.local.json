@@ -26,7 +26,8 @@
       "Bash(cp ~/Documents/Android_ejemplos/AndroidExam/gradlew /Users/cesar/Documents/androidClaude/JuegoRPG/android/gradlew)",
       "Bash(cp ~/Documents/Android_ejemplos/AndroidExam/gradlew.bat /Users/cesar/Documents/androidClaude/JuegoRPG/android/gradlew.bat)",
       "Bash(chmod +x /Users/cesar/Documents/androidClaude/JuegoRPG/android/gradlew)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(/usr/libexec/java_home -V)"
     ]
   }
 }
