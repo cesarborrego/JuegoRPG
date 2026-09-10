@@ -1,0 +1,130 @@
+name: APK debug + aviso Slack
+
+# Genera un APK debug descargable cuando el port Android está en
+# hidanhell/JuegoRPG:main (es decir, cuando el PR se ha mergeado) y avisa
+# por Slack con el enlace de descarga.
+#
+# Vive en el fork (cesarborrego/JuegoRPG) a propósito: así los secrets los
+# controla el dueño del fork y no hidanhell. Por defecto construye
+# hidanhell/JuegoRPG@main sin depender de que el fork esté sincronizado; con
+# "Run workflow" se puede apuntar a otro repo/rama (p. ej. para probar el PR
+# antes del merge: cesarborrego/JuegoRPG @ feature/android-port).
+#
+# Requisitos en el fork:
+#   - Actions habilitado (pestaña Actions -> "I understand my workflows, enable them").
+#   - Secret SLACK_WEBHOOK_URL con un Incoming Webhook de Slack.
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_repo:
+        description: 'Repo a construir (owner/name)'
+        default: 'hidanhell/JuegoRPG'
+      source_ref:
+        description: 'Rama o tag a construir'
+        default: 'main'
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 * * * *'   # cada hora (por si el push del sync no dispara)
+
+env:
+  SOURCE_REPO: ${{ inputs.source_repo || 'hidanhell/JuegoRPG' }}
+  SOURCE_REF: ${{ inputs.source_ref || 'main' }}
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # crear releases en el fork
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ${{ env.SOURCE_REPO }}@${{ env.SOURCE_REF }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SOURCE_REPO }}
+          ref: ${{ env.SOURCE_REF }}
+          fetch-depth: 0
+
+      - name: ¿Hay port Android y es un commit nuevo?
+        id: gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f android/settings.gradle ]; then
+            echo "No hay carpeta android/ en $SOURCE_REPO@$SOURCE_REF. Nada que construir."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          SHA="$(git rev-parse --short HEAD)"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "tag=apk-$SHA" >> "$GITHUB_OUTPUT"
+          if gh release view "apk-$SHA" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Ya existe el release apk-$SHA; no se reconstruye."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK 17
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        if: steps.gate.outputs.run == 'true'
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar NDK y CMake fijados por el proyecto
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --install "ndk;25.2.9519653" "cmake;3.22.1"
+
+      - name: Build :app:assembleDebug
+        if: steps.gate.outputs.run == 'true'
+        working-directory: android
+        run: ./gradlew :app:assembleDebug --no-daemon --console=plain --stacktrace
+
+      - name: Localizar y renombrar el APK
+        if: steps.gate.outputs.run == 'true'
+        id: apk
+        run: |
+          SRC="$(find android/app/build/outputs/apk/debug -name '*.apk' | head -1)"
+          test -n "$SRC" || { echo "::error::No se encontró el APK"; exit 1; }
+          OUT="JuegoRPG-debug-${{ steps.gate.outputs.sha }}.apk"
+          cp "$SRC" "$OUT"
+          echo "path=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar release con el APK
+        if: steps.gate.outputs.run == 'true'
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.gate.outputs.tag }}" "${{ steps.apk.outputs.path }}" \
+            --repo "${{ github.repository }}" \
+            --target main \
+            --title "APK debug — ${{ steps.gate.outputs.sha }}" \
+            --notes "Build automático desde ${SOURCE_REPO}@${{ steps.gate.outputs.sha }} (arm64-v8a + x86_64, sin firmar)." \
+            --prerelease
+          URL="$(gh release view "${{ steps.gate.outputs.tag }}" --repo "${{ github.repository }}" --json url -q .url)"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Avisar a Slack
+        if: steps.gate.outputs.run == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SHA: ${{ steps.gate.outputs.sha }}
+          URL: ${{ steps.release.outputs.url }}
+        run: |
+          test -n "$SLACK_WEBHOOK_URL" || { echo "::error::Falta el secret SLACK_WEBHOOK_URL"; exit 1; }
+          TEXT="$(printf 'Nuevo APK debug de *La Aldea en las Sombras* (port Android)\ncommit %s (%s)\nDescarga: %s' "$SHA" "$SOURCE_REPO" "$URL")"
+          jq -n --arg t "$TEXT" '{text:$t}' \
+            | curl -sSf -X POST -H 'Content-type: application/json' -d @- "$SLACK_WEBHOOK_URL"
