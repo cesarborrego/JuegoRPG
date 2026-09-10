@@ -1,5 +1,6 @@
 package com.hidanhell.juegorphg
 
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -14,26 +15,45 @@ class GameEngine {
         // '\f' form feed: sentinela de "limpiar pantalla" emitido por AndroidRenderizador
         const val CLEAR_SCREEN = ''
         private const val POLL_INTERVAL_MS = 40L
+        private const val TAG = "GameEngine"
+
+        // Si la carga falla (ABI no soportada, .so corrupto/ausente) queda en
+        // false y start() lo reporta en vez de crashear con UnsatisfiedLinkError
+        // sin explicacion al primer external fun llamado.
+        var nativeDisponible = false
+            private set
 
         init {
-            System.loadLibrary("juegorphg")
+            try {
+                System.loadLibrary("juegorphg")
+                nativeDisponible = true
+            } catch (e: UnsatisfiedLinkError) {
+                Log.e(TAG, "No se pudo cargar libjuegorphg.so", e)
+            }
         }
     }
 
     private val scope = CoroutineScope(Dispatchers.IO)
     private var pollJob: Job? = null
 
-    private external fun nativeStartGame()
+    private external fun nativeStartGame(saveDir: String)
     private external fun nativeObtenerOutput(): String
     private external fun nativeEnviarInput(texto: String)
     private external fun nativeEstaActivo(): Boolean
     private external fun nativeDetener()
 
     fun start(
+        saveDir: String,
         onOutput: (String) -> Unit,
         onFinished: () -> Unit = {}
     ) {
-        nativeStartGame()
+        if (!nativeDisponible) {
+            onOutput("[ERROR] No se pudo cargar el motor nativo del juego.\n")
+            onFinished()
+            return
+        }
+
+        nativeStartGame(saveDir)
 
         pollJob = scope.launch {
             while (isActive) {

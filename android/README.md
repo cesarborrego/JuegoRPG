@@ -31,7 +31,7 @@ Detalle completo en `app/src/main/cpp/jni_bridge.cpp`.
 
 ## Requisitos
 
-- Android Studio (Hedgehog+), AGP 8.1.x
+- Android Studio (Hedgehog+), AGP 8.6.x
 - NDK r25c (`25.2.9519653`) y CMake 3.22.1 (SDK Manager)
 - Gradle wrapper: generar con `gradle wrapper` (los binarios no se comitean)
 - **Gradle JDK 17**: en Android Studio recientes el JDK embebido por defecto

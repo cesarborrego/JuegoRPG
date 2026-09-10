@@ -75,7 +75,12 @@ class GameView @JvmOverloads constructor(
 
     /** Arranca el motor. Llamar desde onCreate/onStart de la Activity. */
     fun startGame() {
+        // Context.filesDir es privado a la app y escribible sin permisos
+        // especiales; el CWD del proceso (que es lo que usa el motor en
+        // desktop) no lo es en Android.
+        val saveDir = context.filesDir.resolve("savegames").absolutePath
         engine.start(
+            saveDir = saveDir,
             onOutput = { chunk -> appendOutput(chunk) },
             onFinished = { appendOutput("\n\n[ El juego ha terminado ]\n") }
         )

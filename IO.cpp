@@ -91,6 +91,13 @@ IEntrada&      IO::entrada() { return *entradaActual; }
 void IO::establecerRender(IRenderizador* i)  { renderActual  = i ? i : &defaultRender; }
 void IO::establecerEntrada(IEntrada* i)      { entradaActual = i ? i : &defaultEntrada; }
 
+static std::string dirGuardadoActual = "savegames";
+
+std::string IO::directorioGuardado() { return dirGuardadoActual; }
+void IO::establecerDirectorioGuardado(const std::string& dir) {
+    dirGuardadoActual = dir.empty() ? "savegames" : dir;
+}
+
 // ----------------------------
 // Guardado / Carga de partidas
 // ----------------------------

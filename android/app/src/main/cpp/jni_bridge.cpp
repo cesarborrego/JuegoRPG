@@ -273,11 +273,17 @@ void engineThreadMain() {
 extern "C" {
 
 JNIEXPORT void JNICALL
-Java_com_hidanhell_juegorphg_GameEngine_nativeStartGame(JNIEnv* /*env*/, jobject /*thiz*/) {
+Java_com_hidanhell_juegorphg_GameEngine_nativeStartGame(JNIEnv* env, jobject /*thiz*/, jstring saveDir) {
     if (g_running.exchange(true)) {
         LOGI("nativeStartGame: ya en ejecucion, ignorado");
         return;
     }
+
+    // Directorio escribible de la app (Context.filesDir en Kotlin) donde
+    // guardarPartida/cargarPartida leeran y escribiran en este build.
+    const char* dirUtf = env->GetStringUTFChars(saveDir, nullptr);
+    IO::establecerDirectorioGuardado(dirUtf != nullptr ? dirUtf : "");
+    if (dirUtf != nullptr) env->ReleaseStringUTFChars(saveDir, dirUtf);
 
     {
         std::lock_guard<std::mutex> lock(g_outputMutex);

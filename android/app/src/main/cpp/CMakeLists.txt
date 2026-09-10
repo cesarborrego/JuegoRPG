@@ -26,6 +26,11 @@ message(STATUS "JuegoRPG: GAME_ROOT = ${GAME_ROOT}")
 # -------------------------------------------------------------------
 file(GLOB ENGINE_SOURCES CONFIGURE_DEPENDS "${GAME_ROOT}/*.cpp")
 
+# test_save.cpp trae su propio main() de test (usado por el build de
+# consola vía run_task, no por el juego) y no debe entrar en el .so de
+# la app: peso muerto en release y una segunda definicion de entry point.
+list(FILTER ENGINE_SOURCES EXCLUDE REGEX "test_save\\.cpp$")
+
 add_library(juegorphg SHARED
     ${ENGINE_SOURCES}
     jni_bridge.cpp
