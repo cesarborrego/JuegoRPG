@@ -54,3 +54,8 @@ target_compile_options(juegorphg PRIVATE
 # Librerias del sistema Android: log (logcat) para el bridge JNI.
 find_library(log-lib log)
 target_link_libraries(juegorphg ${log-lib})
+
+# Alineacion de segmentos ELF a 16 KB, obligatoria desde nov-2025 para apps
+# nuevas/actualizadas en Google Play (dispositivos con paginas de 16 KB).
+# El NDK r25c usado aqui no lo hace por defecto (eso llego en NDK r27+).
+target_link_options(juegorphg PRIVATE "-Wl,-z,max-page-size=16384")

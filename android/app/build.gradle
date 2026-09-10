@@ -18,7 +18,11 @@ android {
         externalNativeBuild {
             cmake {
                 // -DANDROID_BUILD lo pone CMakeLists.txt via compile_definitions.
-                arguments '-DANDROID_STL=c++_shared'
+                // c++_static (no c++_shared): al tener una sola libreria nativa
+                // (juegorphg), esto evita empaquetar el libc++_shared.so que trae
+                // el NDK r25c y que no cumple la alineacion a 16 KB exigida desde
+                // nov-2025. Ver nota de alineacion en CMakeLists.txt.
+                arguments '-DANDROID_STL=c++_static'
                 cppFlags '-std=c++17'
             }
         }
