@@ -2,7 +2,7 @@ name: APK debug + aviso Slack
 
 # Genera un APK debug descargable cuando el port Android está en
 # hidanhell/JuegoRPG:main (es decir, cuando el PR se ha mergeado) y avisa
-# por Slack con el enlace de descarga.
+# por Slack: mensaje verde si todo salió bien, rojo si algo falló.
 #
 # Vive en el fork (cesarborrego/JuegoRPG) a propósito: así los secrets los
 # controla el dueño del fork y no hidanhell. Por defecto construye
@@ -12,7 +12,8 @@ name: APK debug + aviso Slack
 #
 # Requisitos en el fork:
 #   - Actions habilitado (pestaña Actions -> "I understand my workflows, enable them").
-#   - Secret SLACK_WEBHOOK_URL con un Incoming Webhook de Slack.
+#   - Secret SLACK_WEBHOOK_URL con un Incoming Webhook de Slack (opcional: sin él
+#     el APK y el release igual se generan, solo se omite el aviso).
 
 on:
   workflow_dispatch:
@@ -31,6 +32,7 @@ on:
 env:
   SOURCE_REPO: ${{ inputs.source_repo || 'hidanhell/JuegoRPG' }}
   SOURCE_REF: ${{ inputs.source_ref || 'main' }}
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 concurrency:
   group: android-apk
@@ -100,7 +102,9 @@ jobs:
           test -n "$SRC" || { echo "::error::No se encontró el APK"; exit 1; }
           OUT="JuegoRPG-debug-${{ steps.gate.outputs.sha }}.apk"
           cp "$SRC" "$OUT"
+          SIZE="$(du -h "$OUT" | cut -f1 | tr -d ' ')"
           echo "path=$OUT" >> "$GITHUB_OUTPUT"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
 
       - name: Publicar release con el APK
         if: steps.gate.outputs.run == 'true'
@@ -117,14 +121,62 @@ jobs:
           URL="$(gh release view "${{ steps.gate.outputs.tag }}" --repo "${{ github.repository }}" --json url -q .url)"
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
-      - name: Avisar a Slack
+      - name: Resumen de la ejecución
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          {
+            echo "### ✅ APK debug generado"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Fuente | \`${SOURCE_REPO}@${{ steps.gate.outputs.sha }}\` |"
+            echo "| APK | \`${{ steps.apk.outputs.path }}\` (${{ steps.apk.outputs.size }}) |"
+            echo "| Release | ${{ steps.release.outputs.url }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Slack — APK generado correctamente
         if: steps.gate.outputs.run == 'true'
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SHA: ${{ steps.gate.outputs.sha }}
-          URL: ${{ steps.release.outputs.url }}
+          REL_URL: ${{ steps.release.outputs.url }}
+          APK_SIZE: ${{ steps.apk.outputs.size }}
         run: |
-          test -n "$SLACK_WEBHOOK_URL" || { echo "::error::Falta el secret SLACK_WEBHOOK_URL"; exit 1; }
-          TEXT="$(printf 'Nuevo APK debug de *La Aldea en las Sombras* (port Android)\ncommit %s (%s)\nDescarga: %s' "$SHA" "$SOURCE_REPO" "$URL")"
-          jq -n --arg t "$TEXT" '{text:$t}' \
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::warning::Sin SLACK_WEBHOOK_URL: el APK y el release se generaron, solo se omite el aviso a Slack."
+            exit 0
+          fi
+          jq -n \
+            --arg sha "$SHA" --arg repo "$SOURCE_REPO" --arg size "$APK_SIZE" \
+            --arg rel "$REL_URL" --arg run "$RUN_URL" \
+            '{
+              text: ("APK debug generado correctamente — " + $repo + "@" + $sha),
+              blocks: [
+                { type: "section", text: { type: "mrkdwn", text:
+                  ":white_check_mark: *APK debug generado correctamente*\n*La Aldea en las Sombras* — port Android" } },
+                { type: "section", fields: [
+                  { type: "mrkdwn", text: ("*Fuente:*\n`" + $repo + "@" + $sha + "`") },
+                  { type: "mrkdwn", text: ("*Tamaño APK:*\n" + $size) }
+                ] },
+                { type: "section", text: { type: "mrkdwn", text:
+                  ("<" + $rel + "|:package: Descargar APK>  ·  <" + $run + "|:page_facing_up: Ver ejecución>") } }
+              ]
+            }' \
             | curl -sSf -X POST -H 'Content-type: application/json' -d @- "$SLACK_WEBHOOK_URL"
+
+      - name: Slack — algo falló
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          [ -n "$SLACK_WEBHOOK_URL" ] || exit 0
+          jq -n \
+            --arg repo "$SOURCE_REPO" --arg ref "$SOURCE_REF" --arg run "$RUN_URL" \
+            '{
+              text: ("Falló el build del APK — " + $repo + "@" + $ref),
+              blocks: [
+                { type: "section", text: { type: "mrkdwn", text:
+                  (":x: *Falló el build del APK debug*\n`" + $repo + "@" + $ref + "`\n<" + $run + "|Ver qué paso falló>") } }
+              ]
+            }' \
+            | curl -sS -X POST -H 'Content-type: application/json' -d @- "$SLACK_WEBHOOK_URL" || true
