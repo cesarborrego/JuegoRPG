@@ -81,7 +81,12 @@ jobs:
 
       - name: Set up Android SDK
         if: steps.gate.outputs.run == 'true'
-        uses: android-actions/setup-android@v3
+        # v3 quedo roto cuando Google retiro el paquete legado "tools" del
+        # repositorio del SDK (sep-2026): esta action intentaba instalarlo
+        # por defecto via `sdkmanager tools`, que ahora devuelve exit 1 y
+        # tira todo el job (ver android-actions/setup-android#537 y #538).
+        # v4 (desde 4.0.2) ya no lo incluye en el set de paquetes por defecto.
+        uses: android-actions/setup-android@v4
 
       - name: Instalar NDK y CMake fijados por el proyecto
         if: steps.gate.outputs.run == 'true'
